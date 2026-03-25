@@ -81,7 +81,8 @@ function Invoke-PythonCheck {
 function Install-TorchForCuda {
     param([string]$IndexUrl)
 
-    Write-Status "A megfelelő CUDA-s PyTorch telepítése indul..."
+    Write-Status "CPU verzio cseréje vagy hianyzo PyTorch telepitese indul a megadott CUDA valtozatra..."
+    Invoke-VenvPython -Arguments @("-m", "pip", "uninstall", "-y", "torch", "torchvision", "torchaudio")
     Invoke-VenvPython -Arguments @("-m", "pip", "install", "--upgrade", "pip")
     Invoke-VenvPython -Arguments @("-m", "pip", "install", "torch", "torchvision", "torchaudio", "--index-url", $IndexUrl)
 }
@@ -116,12 +117,14 @@ if (-not (Test-Path $venvPython)) {
 Write-Status "A virtualis kornyezet rendben van, ellenorzom a fuggosegeket..."
 
 $torchCheckScript = @'
-import importlib.util
-
-if importlib.util.find_spec("torch") is None:
+try:
+    import torch
+    if torch.cuda.is_available():
+        print("READY")
+    else:
+        print("MISSING")
+except ImportError:
     print("MISSING")
-else:
-    print("READY")
 '@
 
 $torchState = Invoke-PythonCheck -Script $torchCheckScript
