@@ -48,14 +48,19 @@ Ha ez a parancs azt mondja, hogy `No suitable Python runtime found`, akkor nem a
 
 2. Telepíts CUDA-s PyTorch buildet a saját CUDA-verziódhoz illő módon a PyTorch hivatalos útmutatója szerint.
 
-Pelda CUDA 12.4-re:
+A `start.ps1` első indításkor megkérdezi, hogy 12-es vagy 13-as CUDA van-e a gépen, és ennek megfelelően telepíti a PyTorch-ot a virtuális környezetbe.
+
+Példa CUDA 12.4-re:
 
 ```powershell
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
-13.0:
+Példa CUDA 13.0-ra:
+
+```powershell
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+```
 
 3. Telepítsd a többi függőséget:
 
@@ -92,6 +97,7 @@ Első telepítéssel együtt:
 .\start.ps1 -Install
 ```
 
+A `start.ps1` automatikusan ellenőrzi a virtuális környezetet, a függőségeket és a Music Flamingo modell helyi cache-ét. Ha valami hiányzik, megpróbálja pótolni, majd csak utána indítja el az alkalmazást.
 Ha a gépeden a `py` launcher nem talál megfelelő runtime-ot, a `start.ps1` már a helyi `python` parancsra támaszkodik, ezért az Anaconda/base vagy bármely elérhető interpreterrel is tud virtuális környezetet hozni.
 
 Az alkalmazás a böngészőben a `http://127.0.0.1:7860` címen nyílik meg.
