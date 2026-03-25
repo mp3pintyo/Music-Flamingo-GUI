@@ -175,12 +175,12 @@ if ($Install) {
 Write-Status "Ellenorzom, hogy a Music Flamingo modell elerheto-e lokalis cache-bol..."
 
 $modelCheckScript = @'
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download
 
 DEFAULT_MODEL_ID = "__MODEL_ID__"
 
 try:
-    snapshot_download(repo_id=DEFAULT_MODEL_ID, local_files_only=True)
+    hf_hub_download(repo_id=DEFAULT_MODEL_ID, filename="model.safetensors", local_files_only=True)
 except Exception:
     print("MISSING")
 else:
@@ -191,14 +191,17 @@ $modelCheckScript = $modelCheckScript.Replace('__MODEL_ID__', $defaultModelId)
 
 $modelState = Invoke-PythonCheck -Script $modelCheckScript
 if ($modelState.ExitCode -ne 0 -or $modelState.Output -notmatch "READY") {
-    Write-Status "A modell nincs helyi cache-ben, letoltes indul. Ez az elso alkalommal sok ideig is tarthat, mert a teljes csomag nagyjabol 16.5 GB..."
+    Write-Status "A modell nincs teljesen helyi cache-ben, letoltes/folytatas indul. Ez az elso alkalommal sok ideig is tarthat, mert a teljes csomag nagyjabol 16.5 GB..."
+    Write-Status "(Megjegyzes: Ha korabban megszakadt a letoltes, akkor is 0%-tol indul a meroszam, de csak a HATRALEVO reszt fogja letolteni!)" -ForegroundColor Yellow
 
     $modelDownloadScript = @'
+import os
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 from huggingface_hub import snapshot_download
 
 DEFAULT_MODEL_ID = "__MODEL_ID__"
 
-snapshot_download(repo_id=DEFAULT_MODEL_ID)
+snapshot_download(repo_id=DEFAULT_MODEL_ID, resume_download=True)
 print("READY")
 '@
 
