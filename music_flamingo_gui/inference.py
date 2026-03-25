@@ -121,7 +121,8 @@ class MusicFlamingoService:
 
             if audio_path:
                 self._ensure_audio_backend_ready()
-                user_content.append({"type": "audio", "path": audio_path})
+                safe_audio_path = self._preprocess_audio(audio_path)
+                user_content.append({"type": "audio", "path": safe_audio_path})
 
             conversation.append({"role": "user", "content": user_content})
 
@@ -199,7 +200,8 @@ class MusicFlamingoService:
                 user_content.append({"type": "text", "text": prompt.strip()})
             if audio_path:
                 self._ensure_audio_backend_ready()
-                user_content.append({"type": "audio", "path": audio_path})
+                safe_audio_path = self._preprocess_audio(audio_path)
+                user_content.append({"type": "audio", "path": safe_audio_path})
             conversation.append({"role": "user", "content": user_content})
 
             inputs = self._processor.apply_chat_template(
@@ -296,6 +298,20 @@ class MusicFlamingoService:
                 "Nem sikerult importalni a Music Flamingo-hoz szukseges Transformers buildet. "
                 "Telepitsd a requirements.txt tartalmat, kulonosen a modular-mf agrol a transformers csomagot."
             ) from TRANSFORMERS_IMPORT_ERROR
+
+    def _preprocess_audio(self, audio_path: str, max_duration: float = 30.0) -> str:
+        """Garantalja, hogy az audio ne okozzon dimenzios hibat (max 30 masodperc es mono)."""
+        import librosa
+        import soundfile as sf
+        import tempfile
+        import os
+        
+        y, sr = librosa.load(audio_path, sr=None, mono=True, duration=max_duration)
+        fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="mf_safe_")
+        os.close(fd)
+        
+        sf.write(temp_path, y, sr)
+        return temp_path
 
     def _ensure_audio_backend_ready(self) -> None:
         try:
@@ -425,4 +441,5 @@ _SERVICE = MusicFlamingoService()
 
 def get_service() -> MusicFlamingoService:
     return _SERVICE
+
 
