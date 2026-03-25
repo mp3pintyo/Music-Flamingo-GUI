@@ -299,14 +299,14 @@ class MusicFlamingoService:
                 "Telepitsd a requirements.txt tartalmat, kulonosen a modular-mf agrol a transformers csomagot."
             ) from TRANSFORMERS_IMPORT_ERROR
 
-    def _preprocess_audio(self, audio_path: str, max_duration: float = 30.0) -> str:
-        """Garantalja, hogy az audio ne okozzon dimenzios hibat (max 30 masodperc es mono)."""
+    def _preprocess_audio(self, audio_path: str) -> str:
+        """Garantalja, hogy az audio tiszta 16kHz-es MONO legyen (barmilyen hosszu)."""
         import librosa
         import soundfile as sf
         import tempfile
         import os
         
-        y, sr = librosa.load(audio_path, sr=None, mono=True, duration=max_duration)
+        y, sr = librosa.load(audio_path, sr=16000, mono=True)
         fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="mf_safe_")
         os.close(fd)
         
@@ -441,5 +441,6 @@ _SERVICE = MusicFlamingoService()
 
 def get_service() -> MusicFlamingoService:
     return _SERVICE
+
 
 
