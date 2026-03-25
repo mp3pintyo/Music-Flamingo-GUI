@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -20,7 +20,7 @@ def load_model(model_id: str, quantization_label: str) -> str:
         )
         return get_service().load_model(options)
     except Exception as exc:
-        return f"Hiba modellbetoltes kozben: {exc}"
+        return f"Hiba a modell betöltése közben: {exc}"
 
 
 def unload_model() -> str:
@@ -28,7 +28,7 @@ def unload_model() -> str:
 
 
 def clear_conversation() -> tuple[list[dict[str, str]], list[dict[str, Any]], str, str, str, None]:
-    return [], [], "", "", "Beszelgetes torolve.", None
+    return [], [], "", "", "Beszélgetés törölve.", None
 
 
 def submit_message(
@@ -42,12 +42,12 @@ def submit_message(
     temperature: float,
     top_p: float,
 ):
-    # Azonnal jelezzuk a felhasznalonak, hogy a kerdes beerkezett.
+    # Azonnal jelezzük a felhasználónak, hogy a kérdés beérkezett.
     user_display = summarize_user_message(prompt or "", audio_path)
     pending_chat = list(chatbot_history)
     pending_chat.append({"role": "user", "content": user_display})
-    pending_chat.append({"role": "assistant", "content": "\u23f3 Feldolgozas folyamatban..."})
-    yield pending_chat, conversation_history, "", "", "Az audio feldolgozasa es a valasz generalasa elkezdodott...", audio_path
+    pending_chat.append({"role": "assistant", "content": "\u23f3 Feldolgozás folyamatban..."})
+    yield pending_chat, conversation_history, "", "", "Az audió feldolgozása és a válasz generálása elkezdődött...", audio_path
 
     try:
         options = ModelOptions(
@@ -60,18 +60,18 @@ def submit_message(
         final_conv = conversation_history
         final_reasoning = ""
         final_answer = ""
-        final_status = "Valasz elkeszult."
+        final_status = "Válasz elkészült."
 
         for update in service.generate_stream(prompt, audio_path, conversation_history, options, generation):
             if update.get("done"):
                 final_conv = update["conversation"]
                 final_reasoning = update["reasoning"]
                 final_answer = update["answer"]
-                final_status = update.get("status_note", "Valasz elkeszult.")
+                final_status = update.get("status_note", "Válasz elkészült.")
             else:
                 content = update.get("answer") or update.get("full_text") or "..."
                 pending_chat[-1]["content"] = content
-                yield list(pending_chat), conversation_history, update.get("reasoning", ""), content, "Generalas folyamatban...", audio_path
+                yield list(pending_chat), conversation_history, update.get("reasoning", ""), content, "Generálás folyamatban...", audio_path
 
         final_chat = list(chatbot_history)
         final_chat.append({"role": "user", "content": user_display})
@@ -87,7 +87,7 @@ def build_ui() -> tuple[gr.Blocks, gr.themes.Theme, str]:
     app_css = """
     .app-shell {max-width: 1440px; margin: 0 auto;}
     .hero {background: linear-gradient(135deg, #07111f 0%, #0f2740 45%, #173d57 100%); color: #f6f7eb; border-radius: 24px; padding: 24px;}
-    .hero h1, .hero p {margin: 0;}
+    .hero h1, .hero p {margin: 0; color: white !important;}
     .note {border-left: 4px solid #dca54c; padding-left: 12px;}
     """
 
@@ -106,46 +106,46 @@ def build_ui() -> tuple[gr.Blocks, gr.themes.Theme, str]:
             <div class="app-shell">
               <div class="hero">
                 <h1>Music Flamingo Local GUI</h1>
-                <p>Helyi webes felulet a nvidia/music-flamingo-think-2601-hf modellhez, audio es szoveges kerdesekkel.</p>
+                <p>Helyi webes felület az nvidia/music-flamingo-think-2601-hf modellhez, audió és szöveges kérdésekkel.</p>
               </div>
             </div>
             """
         )
         gr.Markdown(
-            "A modell nem kereskedelmi kutatasi licenc alatt erheto el. Elso inditasnal a sulyok letoltese es a modell betoltese percekig is tarthat."
+            "A modell nem kereskedelmi kutatási licenc alatt érhető el. Első indításnál a súlyok letöltése és a modell betöltése percekig is tarthat."
         )
 
         with gr.Row():
             with gr.Column(scale=7):
-                chatbot = gr.Chatbot(label="Beszelgetes", height=620)
+                chatbot = gr.Chatbot(label="Beszélgetés", height=620)
                 with gr.Row():
                     prompt_input = gr.Textbox(
-                        label="Utasitas",
-                        placeholder="Pelda: Elemezd a dal mufajat, tempajat, hangnemet es a hangszerelest.",
+                        label="Utasítás",
+                        placeholder="Példa: Elemezd a dal műfaját, tempóját, hangnemét és a hangszerelését.",
                         lines=4,
                     )
-                audio_input = gr.Audio(label="Audio feltoltes", type="filepath", sources=["upload"])
+                audio_input = gr.Audio(label="Audió feltöltés", type="filepath", sources=["upload"])
                 with gr.Row():
-                    submit_button = gr.Button("Kuldes", variant="primary")
-                    clear_button = gr.Button("Beszelgetes torlese")
+                    submit_button = gr.Button("Küldés", variant="primary")
+                    clear_button = gr.Button("Beszélgetés törlése")
             with gr.Column(scale=5):
                 model_id = gr.Textbox(label="Modell", value=DEFAULT_MODEL_ID)
                 quantization = gr.Radio(
-                    label="Memoria mod",
+                    label="Memória mód",
                     choices=["4-bit NF4", "BF16 / FP16"],
                     value="4-bit NF4",
                 )
                 with gr.Row():
-                    load_button = gr.Button("Modell betoltese")
-                    unload_button = gr.Button("Modell kiurites")
-                max_new_tokens = gr.Slider(label="Max uj token", minimum=32, maximum=512, step=32, value=192)
+                    load_button = gr.Button("Modell betöltése")
+                    unload_button = gr.Button("Modell kiürítése")
+                max_new_tokens = gr.Slider(label="Max új token", minimum=32, maximum=512, step=32, value=192)
                 temperature = gr.Slider(label="Temperature", minimum=0.0, maximum=1.5, step=0.05, value=0.6)
                 top_p = gr.Slider(label="Top-p", minimum=0.1, maximum=1.0, step=0.05, value=0.9)
-                status_box = gr.Markdown(value="Varakozas a modell betoltesere.")
-                gr.Markdown("A 4 bites opcio nem GGUF, hanem Transformers-alapu NF4 kvantalas. A loader alapbol 12 GiB GPU plafonnal es CPU offloaddal indul, mert a teljes modell 16 GB VRAM-ba sem mindig fer be teljesen.")
+                status_box = gr.Markdown(value="Várakozás a modell betöltésére.")
+                gr.Markdown("A 4 bites opció nem GGUF, hanem Transformers-alapú NF4 kvantálás. A loader alapból 12 GiB GPU plafonnal és CPU offloaddal indul, mert a teljes modell 16 GB VRAM-ba sem mindig fér be teljesen.")
                 gr.Markdown("### Gondolatmenet")
                 reasoning_box = gr.Markdown()
-                gr.Markdown("### Vegso valasz")
+                gr.Markdown("### Végső válasz")
                 answer_box = gr.Markdown()
 
         submit_inputs = [
@@ -188,3 +188,4 @@ if __name__ == "__main__":
     demo, app_theme, app_css = build_ui()
     demo.queue(default_concurrency_limit=1)
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True, theme=app_theme, css=app_css)
+

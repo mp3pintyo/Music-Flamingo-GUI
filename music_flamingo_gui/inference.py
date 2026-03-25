@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import copy
 import gc
@@ -184,7 +184,7 @@ class MusicFlamingoService:
         model_options: ModelOptions,
         generation: GenerationOptions,
     ):
-        """Generátor: intermediate és final update dict-eket yield-el."""
+        """GenerĂˇtor: intermediate Ă©s final update dict-eket yield-el."""
         from transformers import TextIteratorStreamer
 
         if not (prompt or "").strip() and not audio_path:
@@ -302,7 +302,7 @@ class MusicFlamingoService:
             import librosa  # noqa: F401
         except ImportError as exc:
             raise RuntimeError(
-                "Az audio feldolgozashoz hianyzik a librosa csomag. Telepitsd a requirements.txt tartalmat, vagy futtasd: pip install librosa"
+                "Az audió feldolgozásához hiányzik a librosa csomag. Telepítsd a requirements.txt tartalmát, vagy futtasd: pip install librosa"
             ) from exc
 
     def _build_quantization_config(self, options: ModelOptions) -> BitsAndBytesConfig | None:
@@ -310,10 +310,10 @@ class MusicFlamingoService:
             return None
 
         if BitsAndBytesConfig is None:
-            raise RuntimeError("A 4 bites betolteshez a bitsandbytes tamogatas nem erheto el.")
+            raise RuntimeError("A 4 bites betöltéshez a bitsandbytes támogatás nem érhető el.")
 
         if not torch.cuda.is_available():
-            raise RuntimeError("A 4 bites modhoz CUDA-s NVIDIA GPU kell.")
+            raise RuntimeError("A 4 bites módhoz CUDA-s NVIDIA GPU kell.")
 
         return BitsAndBytesConfig(
             load_in_4bit=True,
@@ -367,7 +367,7 @@ class MusicFlamingoService:
         else:
             context_limit = getattr(self._model.config, "max_position_embeddings", None)
 
-        # Ha a kiolvasott limit az audio-adapter 1200-as erteke lenne, ne korlátozzuk a generalast.
+        # Ha a kiolvasott limit az audio-adapter 1200-as erteke lenne, ne korlĂˇtozzuk a generalast.
         if not context_limit or int(context_limit) < 2048:
             return requested_new_tokens, "Valasz elkeszult."
 
@@ -425,3 +425,4 @@ _SERVICE = MusicFlamingoService()
 
 def get_service() -> MusicFlamingoService:
     return _SERVICE
+

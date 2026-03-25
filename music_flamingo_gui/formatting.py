@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from pathlib import Path
@@ -25,9 +25,10 @@ def summarize_user_message(prompt: str, audio_path: str | None) -> str:
         parts.append(prompt.strip())
 
     if audio_path:
-        parts.append(f"Hangfajl: {Path(audio_path).name}")
+        parts.append(f"Hangfájl: {Path(audio_path).name}")
 
     if not parts:
-        return "Ures kerdes"
+        return "Üres kérdés"
 
     return "\n\n".join(parts)
+
