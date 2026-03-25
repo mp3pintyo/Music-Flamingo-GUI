@@ -90,8 +90,37 @@ class MusicFlamingoService:
                 load_kwargs["quantization_config"] = quantization_config
 
             self._processor = AutoProcessor.from_pretrained(options.model_id)
+
+            # A modular-mf branch ad76e28 commit eltávolította a hardcoded partial_rotary_factor
+            # értéket a konfigból, de a HuggingFace-en lévő checkpoint config.json nem lett
+            # frissítve, ezért kézzel pótoljuk, különben a rotary embedding mérete 2560 lenne
+            # 512 helyett, ami tensor méret hibát okoz.
+            from transformers import MusicFlamingoConfig
+            config = MusicFlamingoConfig.from_pretrained(options.model_id)
+            if "partial_rotary_factor" not in config.rope_parameters:
+                config.rope_parameters["partial_rotary_factor"] = 0.2
+                load_kwargs["config"] = config
+
             self._model = MusicFlamingoForConditionalGeneration.from_pretrained(options.model_id, **load_kwargs)
             self._options = options
+
+            # Ellenőrzés: ha bármely réteg lemezre (disk) lett offloadolva, az inferencia
+            # során minden forward pass-hez lemezolvasás kell → extrém lassulás, látszólag
+            # alacsony CPU/GPU-terhelés mellett a gép teljesen befagy.
+            device_map = getattr(self._model, "hf_device_map", {}) or {}
+            disk_layers = [k for k, v in device_map.items() if v == "disk"]
+            if disk_layers:
+                import warnings
+                warnings.warn(
+                    f"FIGYELEM: {len(disk_layers)} modell-réteg lemezre (disk) lett offloadolva "
+                    f"({disk_layers[:3]}{'...' if len(disk_layers) > 3 else ''}). "
+                    "Az inferencia során minden lépésnél lemezolvasás szükséges, "
+                    "ami a gép teljes lefagyásához vezet! "
+                    "Javasolt megoldás: csökkentsd a max_new_tokens értékét, "
+                    "vagy növeld a GPU memória korlátot (gpu_memory_limit_gib).",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
             return self._describe_runtime(options)
 
@@ -113,6 +142,13 @@ class MusicFlamingoService:
 
         self.load_model(model_options)
 
+        # Audio előfeldolgozás a lockon kívül — a librosa.load() erőforrás-igényes,
+        # nem szabad a modellt blokkoló lock alatt futtatni.
+        safe_audio_path: str | None = None
+        if audio_path:
+            self._ensure_audio_backend_ready()
+            safe_audio_path = self._preprocess_audio(audio_path)
+
         with self._lock:
             conversation = copy.deepcopy(history or [])
             user_content: list[dict[str, str]] = []
@@ -120,9 +156,7 @@ class MusicFlamingoService:
             if prompt.strip():
                 user_content.append({"type": "text", "text": prompt.strip()})
 
-            if audio_path:
-                self._ensure_audio_backend_ready()
-                safe_audio_path = self._preprocess_audio(audio_path)
+            if safe_audio_path:
                 user_content.append({"type": "audio", "path": safe_audio_path})
 
             conversation.append({"role": "user", "content": user_content})
@@ -195,14 +229,19 @@ class MusicFlamingoService:
 
         self.load_model(model_options)
 
+        # Audio előfeldolgozás a lockon kívül — a librosa.load() erőforrás-igényes,
+        # nem szabad a modellt blokkoló lock alatt futtatni.
+        safe_audio_path: str | None = None
+        if audio_path:
+            self._ensure_audio_backend_ready()
+            safe_audio_path = self._preprocess_audio(audio_path)
+
         with self._lock:
             conversation = copy.deepcopy(history or [])
             user_content: list[dict[str, str]] = []
             if (prompt or "").strip():
                 user_content.append({"type": "text", "text": prompt.strip()})
-            if audio_path:
-                self._ensure_audio_backend_ready()
-                safe_audio_path = self._preprocess_audio(audio_path)
+            if safe_audio_path:
                 user_content.append({"type": "audio", "path": safe_audio_path})
             conversation.append({"role": "user", "content": user_content})
 
@@ -302,24 +341,48 @@ class MusicFlamingoService:
                 "Telepitsd a requirements.txt tartalmat, kulonosen a modular-mf agrol a transformers csomagot."
             ) from TRANSFORMERS_IMPORT_ERROR
 
-    # A modell processzora 30 másodpercenként dolgozza fel az audiót külön ablakokban.
-    # Ha az audio hossza meghaladja a 30 másodpercet, a feldolgozás során egy bug
-    # lép fel az audio-tokenek és az ablakok közötti eltérés miatt (tensor méret hiba).
-    # Ezért az audiót 30 másodpercre vágjuk.
-    _MAX_AUDIO_SECONDS = 30.0
+    # Maximális feldolgozandó audió hossz másodpercben.
+    # A modell audio-adapter kontextus limitje ~1200 frame (kb. 30-75 mp), ennél hosszabb
+    # bemenetet nem érdemes beengedni — csak lelassítja az inferenciát és pazarolja a VRAM-ot.
+    MAX_AUDIO_SECONDS: int = 90
 
     def _preprocess_audio(self, audio_path: str) -> str:
-        """16kHz monóra konvertálja és legfeljebb 30 másodpercre csonkítja az audiót."""
+        """16kHz monóra konvertálja az audiót a processzor számára.
+
+        Ha a fájl hosszabb mint MAX_AUDIO_SECONDS, csak az első részt dolgozza fel
+        és figyelmeztet a csonkításról.
+        """
         import librosa
         import soundfile as sf
         import tempfile
         import os
 
-        y, _ = librosa.load(audio_path, sr=16000, mono=True)
+        # Fájlméret előzetes ellenőrzése — nagyon nagy fájloknál korai figyelmeztetés
+        file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+        if file_size_mb > 200:
+            raise ValueError(
+                f"A hangfájl túl nagy ({file_size_mb:.0f} MB). "
+                f"Kérjük legfeljebb {self.MAX_AUDIO_SECONDS} másodperces részletet tölts fel."
+            )
 
-        max_samples = int(self._MAX_AUDIO_SECONDS * 16000)
-        if len(y) > max_samples:
-            y = y[:max_samples]
+        # Csak a szükséges részt töltjük be, hogy elkerüljük a több perces fájlok
+        # teljes RAM-ba töltését (librosa egyébként az egész fájlt betölti)
+        duration_check, sr_native = librosa.load(audio_path, sr=None, mono=True, duration=self.MAX_AUDIO_SECONDS + 1)
+        actual_seconds = len(duration_check) / sr_native
+        load_duration = min(actual_seconds, self.MAX_AUDIO_SECONDS)
+
+        if actual_seconds > self.MAX_AUDIO_SECONDS:
+            import warnings
+            warnings.warn(
+                f"A hangfájl hossza {actual_seconds:.0f} mp, ami meghaladja a {self.MAX_AUDIO_SECONDS} mp-es korlátot. "
+                f"Csak az első {self.MAX_AUDIO_SECONDS} mp kerül feldolgozásra.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        del duration_check  # felszabadítjuk az előzetes betöltést
+
+        y, _ = librosa.load(audio_path, sr=16000, mono=True, duration=load_duration)
 
         fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="mf_safe_")
         os.close(fd)
@@ -439,7 +502,19 @@ class MusicFlamingoService:
         device = "CUDA" if torch.cuda.is_available() else "CPU"
         offload = f" GPU limit: {options.gpu_memory_limit_gib} GiB." if torch.cuda.is_available() else ""
         cpu_offload = " CPU offload aktiv." if options.cpu_offload and torch.cuda.is_available() else ""
-        return f"A modell keszen all. Mod: {precision}. Backend: {device}.{offload}{cpu_offload}"
+
+        disk_warning = ""
+        device_map = getattr(self._model, "hf_device_map", {}) or {}
+        disk_layers = [k for k, v in device_map.items() if v == "disk"]
+        if disk_layers:
+            disk_warning = (
+                f" ⚠️ FIGYELEM: {len(disk_layers)} réteg lemezre offloadolva! "
+                "Az inferencia közben a gép be fog fagyni. "
+                "Csökkentsd a GPU memória korlátot, hogy több réteg a VRAM-ba kerüljön, "
+                "vagy tölts be kisebb modellt."
+            )
+
+        return f"A modell keszen all. Mod: {precision}. Backend: {device}.{offload}{cpu_offload}{disk_warning}"
 
     def _unload_locked(self) -> None:
         self._model = None

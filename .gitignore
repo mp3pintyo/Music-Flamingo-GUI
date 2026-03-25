@@ -4,3 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .gradio/
+regi_kod/
+*.mp3
+nvidia-source/
+*.wav
