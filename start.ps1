@@ -201,7 +201,7 @@ from huggingface_hub import snapshot_download
 
 DEFAULT_MODEL_ID = "__MODEL_ID__"
 
-snapshot_download(repo_id=DEFAULT_MODEL_ID, resume_download=True)
+snapshot_download(repo_id=DEFAULT_MODEL_ID)
 print("READY")
 '@
 
