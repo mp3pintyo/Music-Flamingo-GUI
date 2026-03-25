@@ -8,6 +8,7 @@ $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectRoot
 
 $venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$defaultModelId = "nvidia/music-flamingo-think-2601-hf"
 
 function Write-Status {
     param([string]$Message)
@@ -43,10 +44,37 @@ function Invoke-VenvPython {
 function Invoke-PythonCheck {
     param([string]$Script)
 
-    $output = & $venvPython -c $Script 2>&1
-    [pscustomobject]@{
-        ExitCode = $LASTEXITCODE
-        Output   = (($output | Out-String).Trim())
+    $tempBase = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), [System.Guid]::NewGuid().ToString())
+    $scriptPath = "$tempBase.py"
+    $stdoutPath = "$tempBase.stdout.txt"
+    $stderrPath = "$tempBase.stderr.txt"
+
+    try {
+        Set-Content -Path $scriptPath -Value $Script -Encoding UTF8
+
+        $startInfo = @{
+            FilePath               = $venvPython
+            ArgumentList           = @($scriptPath)
+            NoNewWindow            = $true
+            Wait                   = $true
+            PassThru               = $true
+            RedirectStandardOutput = $stdoutPath
+            RedirectStandardError  = $stderrPath
+        }
+
+        $process = Start-Process @startInfo
+
+        $stdout = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { "" }
+        $stderr = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { "" }
+        $combinedOutput = (@($stdout, $stderr) | Where-Object { $_ }) -join [Environment]::NewLine
+
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output   = $combinedOutput.Trim()
+        }
+    }
+    finally {
+        Remove-Item -Path $scriptPath, $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
     }
 }
 
@@ -56,6 +84,20 @@ function Install-TorchForCuda {
     Write-Status "A megfelelő CUDA-s PyTorch telepítése indul..."
     Invoke-VenvPython -Arguments @("-m", "pip", "install", "--upgrade", "pip")
     Invoke-VenvPython -Arguments @("-m", "pip", "install", "torch", "torchvision", "torchaudio", "--index-url", $IndexUrl)
+}
+
+function Invoke-VenvPythonScript {
+    param([string]$Script)
+
+    $scriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), ([System.Guid]::NewGuid().ToString() + ".py"))
+
+    try {
+        Set-Content -Path $scriptPath -Value $Script -Encoding UTF8
+        Invoke-VenvPython -Arguments @($scriptPath)
+    }
+    finally {
+        Remove-Item -Path $scriptPath -ErrorAction SilentlyContinue
+    }
 }
 
 if (-not (Test-Path $venvPython)) {
@@ -135,7 +177,7 @@ Write-Status "Ellenorzom, hogy a Music Flamingo modell elerheto-e lokalis cache-
 $modelCheckScript = @'
 from huggingface_hub import snapshot_download
 
-from music_flamingo_gui.inference import DEFAULT_MODEL_ID
+DEFAULT_MODEL_ID = "__MODEL_ID__"
 
 try:
     snapshot_download(repo_id=DEFAULT_MODEL_ID, local_files_only=True)
@@ -145,22 +187,28 @@ else:
     print("READY")
 '@
 
+$modelCheckScript = $modelCheckScript.Replace('__MODEL_ID__', $defaultModelId)
+
 $modelState = Invoke-PythonCheck -Script $modelCheckScript
 if ($modelState.ExitCode -ne 0 -or $modelState.Output -notmatch "READY") {
-    Write-Status "A modell nincs helyi cache-ben, letoltes indul..."
+    Write-Status "A modell nincs helyi cache-ben, letoltes indul. Ez az elso alkalommal sok ideig is tarthat, mert a teljes csomag nagyjabol 16.5 GB..."
 
     $modelDownloadScript = @'
 from huggingface_hub import snapshot_download
 
-from music_flamingo_gui.inference import DEFAULT_MODEL_ID
+DEFAULT_MODEL_ID = "__MODEL_ID__"
 
 snapshot_download(repo_id=DEFAULT_MODEL_ID)
 print("READY")
 '@
 
-    $downloadState = Invoke-PythonCheck -Script $modelDownloadScript
-    if ($downloadState.ExitCode -ne 0 -or $downloadState.Output -notmatch "READY") {
-        throw "A modell letoltese nem sikerult. Ha a repository gated, futtasd elotte a huggingface-cli login parancsot, es fogadd el a modell licencet a Hugging Face oldalan."
+    $modelDownloadScript = $modelDownloadScript.Replace('__MODEL_ID__', $defaultModelId)
+
+    try {
+        Invoke-VenvPythonScript -Script $modelDownloadScript
+    }
+    catch {
+        throw "A modell letoltese nem sikerult. A fenti Python hiba alapjan ellenorizd a halozatot, a szabad lemezteruletet es a Hugging Face hozzaferest. Ha a repo gated lenne, akkor kulon bejelentkezes vagy licencelfogadas is szukseges lehet."
     }
 }
 
