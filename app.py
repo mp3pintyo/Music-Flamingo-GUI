@@ -150,7 +150,7 @@ def build_ui() -> tuple[gr.Blocks, gr.themes.Theme, str]:
                 with gr.Row():
                     load_button = gr.Button("Modell betöltése")
                     unload_button = gr.Button("Modell kiürítése")
-                max_new_tokens = gr.Slider(label="Max új token", minimum=32, maximum=512, step=32, value=192)
+                max_new_tokens = gr.Slider(label="Max új token", minimum=64, maximum=2048, step=64, value=1024)
                 temperature = gr.Slider(label="Temperature", minimum=0.0, maximum=1.5, step=0.05, value=0.6)
                 top_p = gr.Slider(label="Top-p", minimum=0.1, maximum=1.0, step=0.05, value=0.9)
                 status_box = gr.Markdown(value="Várakozás a modell betöltésére.")

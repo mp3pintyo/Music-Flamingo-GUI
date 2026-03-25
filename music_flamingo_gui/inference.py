@@ -36,9 +36,10 @@ class ModelOptions:
 
 @dataclass(frozen=True)
 class GenerationOptions:
-    max_new_tokens: int = 768
+    max_new_tokens: int = 2048
     temperature: float = 0.6
     top_p: float = 0.9
+    repetition_penalty: float = 1.2
 
 
 @dataclass
@@ -143,6 +144,7 @@ class MusicFlamingoService:
             generation_kwargs: dict[str, Any] = {
                 "max_new_tokens": effective_max_new_tokens,
                 "max_length": prompt_length + effective_max_new_tokens,
+                "repetition_penalty": generation.repetition_penalty,
             }
             if generation.temperature > 0:
                 generation_kwargs.update(
@@ -229,6 +231,7 @@ class MusicFlamingoService:
                 **inputs,
                 "max_new_tokens": effective_max_new_tokens,
                 "max_length": prompt_length + effective_max_new_tokens,
+                "repetition_penalty": generation.repetition_penalty,
                 "streamer": streamer,
             }
             if generation.temperature > 0:
