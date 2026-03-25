@@ -299,18 +299,29 @@ class MusicFlamingoService:
                 "Telepitsd a requirements.txt tartalmat, kulonosen a modular-mf agrol a transformers csomagot."
             ) from TRANSFORMERS_IMPORT_ERROR
 
+    # A modell processzora 30 másodpercenként dolgozza fel az audiót külön ablakokban.
+    # Ha az audio hossza meghaladja a 30 másodpercet, a feldolgozás során egy bug
+    # lép fel az audio-tokenek és az ablakok közötti eltérés miatt (tensor méret hiba).
+    # Ezért az audiót 30 másodpercre vágjuk.
+    _MAX_AUDIO_SECONDS = 30.0
+
     def _preprocess_audio(self, audio_path: str) -> str:
-        """Garantalja, hogy az audio tiszta 16kHz-es MONO legyen (barmilyen hosszu)."""
+        """16kHz monóra konvertálja és legfeljebb 30 másodpercre csonkítja az audiót."""
         import librosa
         import soundfile as sf
         import tempfile
         import os
-        
-        y, sr = librosa.load(audio_path, sr=16000, mono=True)
+
+        y, _ = librosa.load(audio_path, sr=16000, mono=True)
+
+        max_samples = int(self._MAX_AUDIO_SECONDS * 16000)
+        if len(y) > max_samples:
+            y = y[:max_samples]
+
         fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="mf_safe_")
         os.close(fd)
-        
-        sf.write(temp_path, y, sr)
+
+        sf.write(temp_path, y, 16000)
         return temp_path
 
     def _ensure_audio_backend_ready(self) -> None:

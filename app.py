@@ -42,12 +42,24 @@ def submit_message(
     temperature: float,
     top_p: float,
 ):
-    # Azonnal jelezzük a felhasználónak, hogy a kérdés beérkezett.
+    # Azonnal jelezzük a felhasználónak, hogy a kéréskérdés beérkezett.
     user_display = summarize_user_message(prompt or "", audio_path)
     pending_chat = list(chatbot_history)
     pending_chat.append({"role": "user", "content": user_display})
     pending_chat.append({"role": "assistant", "content": "\u23f3 Feldolgozás folyamatban..."})
-    yield pending_chat, conversation_history, "", "", "Az audió feldolgozása és a válasz generálása elkezdődött...", audio_path
+
+    # Figyelmeztető üzenet, ha az audio 30 másodpercnél hosszabb.
+    trunc_warning = ""
+    if audio_path:
+        try:
+            import librosa
+            _dur = librosa.get_duration(path=audio_path)
+            if _dur > 30.0:
+                trunc_warning = f" ⚠️ Az audio {_dur:.1f}s hosszú — a modell csak az első 30s-t elemzi (a processzor jelenlegi limitje)."
+        except Exception:
+            pass
+
+    yield pending_chat, conversation_history, "", "", "Az audió feldolgozása és a válasz generálása elkezdődött..." + trunc_warning, audio_path
 
     try:
         options = ModelOptions(
@@ -76,7 +88,7 @@ def submit_message(
         final_chat = list(chatbot_history)
         final_chat.append({"role": "user", "content": user_display})
         final_chat.append({"role": "assistant", "content": final_answer})
-        yield final_chat, final_conv, final_reasoning, final_answer, final_status, None
+        yield final_chat, final_conv, final_reasoning, final_answer, final_status + trunc_warning, None
 
     except Exception as exc:
         pending_chat[-1]["content"] = f"Hiba: {exc}"
