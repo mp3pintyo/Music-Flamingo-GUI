@@ -1,7 +1,12 @@
 # Music Flamingo Local GUI
 
 Ez a projekt egy helyi webes feluletet ad a `nvidia/music-flamingo-think-2601-hf` modellhez.
-Az app audio feltoltest, szoveges promptot, tobbfordulos beszelgetest, es valaszparameter-allitasokat ad.
+Az app audio feltoltest, szoveges promptot, tobbfordulos beszelgetest es valaszparameter-allitasokat ad.
+
+## Attekintes
+
+A projekt celja, hogy egy egyszeru, helyi kezelofeluleten keresztul tudd hasznalni a Music Flamingo modellt Windows rendszeren.
+A felulet a modell betolteset, az audiofajlok feltolteset es a valaszok finomhangolasat kezeli.
 
 ## Fontos technikai megjegyzes a kvantalasrol
 
@@ -98,6 +103,10 @@ Az alkalmazas a bongeszoben a `http://127.0.0.1:7860` cimen nyilik meg.
 3. Adj meg egy promptot.
 4. Opcionlisan tolts fel MP3, WAV vagy FLAC fajlt.
 5. Kuldd el a kerdest.
+
+## Licenc
+
+Ez a projekt MIT licenc alatt all. Reszletek a [LICENSE](LICENSE) fajlban.
 
 ## Praktikus beallitasok 4090 Laptop GPU-hoz
 
